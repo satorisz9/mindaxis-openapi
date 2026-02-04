@@ -1,0 +1,856 @@
+openapi: 3.1.0
+info:
+  title: MindAxis Open API
+  description: |
+    MindAxis Open API provides access to user personality profiles, interests, and snack balances.
+
+    ## Authentication
+
+    This API supports two authentication methods:
+
+    ### OAuth 2.0 (Authorization Code Flow with PKCE)
+    For accessing user's own data with their consent.
+    - Endpoints: `/api/open/me`, `/api/open/names`, `/api/open/interests`, `/api/open/snacks/*`
+    - Scopes: `profile:read`, `interests:read`, `snacks:read`, `snacks:consume`
+
+    ### API Key
+    For accessing public profile data.
+    - Endpoints: `/api/open/profile/{twinShareId}`, `/api/open/profiles`
+    - Rate limit: 1000 requests per hour
+
+    ## Data Privacy
+
+    This API only exposes `PublicPersonalityProfile` data. Private data such as journals,
+    images, and activity logs are never accessible through this API.
+  version: 1.0.0
+  contact:
+    name: MindAxis Support
+    url: https://mindaxis.app
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://mindaxis.app/api
+    description: Production server
+  - url: http://localhost:3000/api
+    description: Development server
+
+tags:
+  - name: OAuth
+    description: OAuth 2.0 authorization endpoints
+  - name: Profile
+    description: User personality profile endpoints
+  - name: Interests
+    description: User interests endpoints
+  - name: Snacks
+    description: Snack balance and consumption endpoints
+
+paths:
+  /oauth/authorize:
+    get:
+      tags:
+        - OAuth
+      summary: Authorization endpoint
+      description: |
+        Initiates the OAuth 2.0 authorization flow. Redirects to MindAxis login if not authenticated,
+        then shows consent screen for requested scopes.
+      parameters:
+        - name: response_type
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [code]
+          description: Must be "code"
+        - name: client_id
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Your registered client ID
+        - name: redirect_uri
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uri
+          description: Must match one of your registered redirect URIs
+        - name: scope
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Space-separated list of scopes (profile:read, interests:read, snacks:read, snacks:consume)
+        - name: state
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Opaque value to maintain state between request and callback
+        - name: code_challenge
+          in: query
+          required: false
+          schema:
+            type: string
+          description: PKCE code challenge
+        - name: code_challenge_method
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [S256, plain]
+          description: PKCE code challenge method
+      responses:
+        '302':
+          description: Redirect to consent screen or login page
+        '400':
+          description: Invalid request parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthError'
+
+  /oauth/token:
+    post:
+      tags:
+        - OAuth
+      summary: Token endpoint
+      description: Exchange authorization code for access token
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required:
+                - grant_type
+                - code
+                - redirect_uri
+                - client_id
+                - client_secret
+              properties:
+                grant_type:
+                  type: string
+                  enum: [authorization_code, refresh_token]
+                code:
+                  type: string
+                  description: Authorization code (for authorization_code grant)
+                refresh_token:
+                  type: string
+                  description: Refresh token (for refresh_token grant)
+                redirect_uri:
+                  type: string
+                  format: uri
+                client_id:
+                  type: string
+                client_secret:
+                  type: string
+                code_verifier:
+                  type: string
+                  description: PKCE code verifier
+      responses:
+        '200':
+          description: Token response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthError'
+        '401':
+          description: Invalid client credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthError'
+
+  /open/me:
+    get:
+      tags:
+        - Profile
+      summary: Get authenticated user's profile
+      description: Returns the public personality profile of the authenticated user
+      security:
+        - oauth2: [profile:read]
+      responses:
+        '200':
+          description: User profile
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: "private, max-age=60"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicPersonalityProfile'
+        '401':
+          description: Invalid or expired token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthError'
+        '403':
+          description: Insufficient scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthError'
+        '404':
+          description: Profile not found (diagnosis not completed)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthError'
+
+  /open/names:
+    get:
+      tags:
+        - Profile
+      summary: Get owner and twin names
+      description: Returns only the owner name and twin name (lightweight endpoint)
+      security:
+        - oauth2: [profile:read]
+      responses:
+        '200':
+          description: Names response
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: "private, max-age=60"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OwnerTwinNames'
+        '401':
+          description: Invalid or expired token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthError'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthError'
+
+  /open/profile/{twinShareId}:
+    get:
+      tags:
+        - Profile
+      summary: Get public profile by twinShareId
+      description: Returns the public personality profile for a given twinShareId (API key auth)
+      security:
+        - apiKey: []
+      parameters:
+        - name: twinShareId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Public twin share ID
+      responses:
+        '200':
+          description: Public profile
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: "public, max-age=300"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicPersonalityProfile'
+        '401':
+          description: Invalid API key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: Profile not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '429':
+          description: Rate limit exceeded
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+              description: Seconds until rate limit resets
+            X-RateLimit-Limit:
+              schema:
+                type: integer
+              description: "1000"
+            X-RateLimit-Remaining:
+              schema:
+                type: integer
+              description: Remaining requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /open/profiles:
+    post:
+      tags:
+        - Profile
+      summary: Get multiple public profiles
+      description: Returns public profiles for multiple twinShareIds (max 100)
+      security:
+        - apiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - twinShareIds
+              properties:
+                twinShareIds:
+                  type: array
+                  items:
+                    type: string
+                  maxItems: 100
+                  description: Array of twinShareIds to fetch
+      responses:
+        '200':
+          description: Batch profiles response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchProfilesResponse'
+        '400':
+          description: Invalid request (too many IDs, etc.)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '401':
+          description: Invalid API key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '429':
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /open/interests:
+    get:
+      tags:
+        - Interests
+      summary: Get user interests
+      description: |
+        Returns the user's interests (genres) extracted from journals via AI.
+        Data is cached for 24 hours and automatically regenerated when expired.
+      security:
+        - oauth2: [interests:read]
+      responses:
+        '200':
+          description: Interests response
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: "private, max-age=3600"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InterestsResponse'
+        '401':
+          description: Invalid or expired token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthError'
+        '403':
+          description: Insufficient scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthError'
+        '404':
+          description: No interests data (insufficient journal entries)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthError'
+
+  /open/snacks:
+    get:
+      tags:
+        - Snacks
+      summary: Get snack balance
+      description: Returns the user's snack balance and action costs
+      security:
+        - oauth2: [snacks:read]
+      responses:
+        '200':
+          description: Snack balance response
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: "private, max-age=10"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SnacksResponse'
+        '401':
+          description: Invalid or expired token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthError'
+        '403':
+          description: Insufficient scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthError'
+
+  /open/snacks/consume:
+    post:
+      tags:
+        - Snacks
+      summary: Consume snacks for an action
+      description: Consumes snacks for the specified action type
+      security:
+        - oauth2: [snacks:consume]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - action
+              properties:
+                action:
+                  type: string
+                  enum: [EXPLORE, POST, COMMENT, LIKE, FOLLOW]
+                  description: Action type to consume snacks for
+      responses:
+        '200':
+          description: Snacks consumed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsumeSnacksResponse'
+        '400':
+          description: Invalid action or insufficient snacks
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsumeSnacksError'
+        '401':
+          description: Invalid or expired token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthError'
+        '403':
+          description: Insufficient scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthError'
+
+components:
+  securitySchemes:
+    oauth2:
+      type: oauth2
+      description: OAuth 2.0 Authorization Code Flow with PKCE
+      flows:
+        authorizationCode:
+          authorizationUrl: https://mindaxis.app/api/oauth/authorize
+          tokenUrl: https://mindaxis.app/api/oauth/token
+          scopes:
+            profile:read: Read user profile
+            interests:read: Read user interests
+            snacks:read: Read snack balance
+            snacks:consume: Consume snacks
+    apiKey:
+      type: http
+      scheme: bearer
+      description: API Key for public profile access
+
+  schemas:
+    PublicPersonalityProfile:
+      type: object
+      required:
+        - id
+        - userIdPublic
+        - twinId
+        - personalitySnapshot
+        - twinStyle
+        - safetyPrefs
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          description: Public twin share ID
+        userIdPublic:
+          type: string
+          description: Public user ID (same as id)
+        twinId:
+          type: string
+          description: Twin ID (same as id)
+        displayName:
+          type: string
+          nullable: true
+          description: User's display name
+        twinName:
+          type: string
+          nullable: true
+          description: Twin's name
+        avatarUrl:
+          type: string
+          nullable: true
+          format: uri
+          description: Avatar image URL
+        avatarThumbnailUrl:
+          type: string
+          nullable: true
+          format: uri
+          description: Avatar thumbnail URL
+        personalitySnapshot:
+          $ref: '#/components/schemas/PersonalitySnapshot'
+        twinStyle:
+          $ref: '#/components/schemas/TwinStyle'
+        safetyPrefs:
+          $ref: '#/components/schemas/SafetyPrefs'
+        createdAt:
+          type: string
+          format: date-time
+          description: Profile creation timestamp
+        updatedAt:
+          type: string
+          format: date-time
+          description: Profile last update timestamp
+
+    PersonalitySnapshot:
+      type: object
+      required:
+        - mbti
+        - narr4
+        - rep4
+        - fullCode
+        - bigFive
+        - strengthsSummary
+        - weaknessesSummary
+      properties:
+        mbti:
+          type: string
+          pattern: '^[IE][NS][TF][JP]$'
+          example: 'INFJ'
+          description: MBTI type (16 types)
+        narr4:
+          type: string
+          pattern: '^[A-Z]{4}$'
+          example: 'ARLO'
+          description: Narrative style code (4 letters)
+        rep4:
+          type: string
+          pattern: '^[A-Z]{4}$'
+          example: 'VSOA'
+          description: Representation style code (4 letters)
+        fullCode:
+          type: string
+          pattern: '^[IE][NS][TF][JP]-[A-Z]{4}-[A-Z]{4}$'
+          example: 'INFJ-ARLO-VSOA'
+          description: Full personality code (MBTI-NARR4-REP4)
+        bigFive:
+          $ref: '#/components/schemas/BigFiveScores'
+        bfFlags:
+          type: string
+          nullable: true
+          example: 'EH'
+          description: Big Five flags (extreme scores)
+        strengthsSummary:
+          type: string
+          maxLength: 200
+          description: Summary of personality strengths
+        weaknessesSummary:
+          type: string
+          maxLength: 200
+          description: Summary of personality weaknesses
+
+    BigFiveScores:
+      type: object
+      required: [O, C, E, A, N]
+      description: Big Five personality scores (0-100 scale)
+      properties:
+        O:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Openness to Experience
+        C:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Conscientiousness
+        E:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Extraversion
+        A:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Agreeableness
+        N:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Neuroticism
+
+    TwinStyle:
+      type: object
+      required: [tone, tempo, formality]
+      properties:
+        tone:
+          type: string
+          enum: [gentle, casual, formal]
+          description: Communication tone
+        tempo:
+          type: string
+          enum: [slow, moderate, fast]
+          description: Response tempo
+        formality:
+          type: string
+          enum: [casual, polite, formal]
+          description: Formality level
+
+    SafetyPrefs:
+      type: object
+      required: [allowRomance, allowPolitics, allowReligion, customBlockedTopics]
+      properties:
+        allowRomance:
+          type: boolean
+          description: Allow romantic topics
+        allowPolitics:
+          type: boolean
+          description: Allow political topics
+        allowReligion:
+          type: boolean
+          description: Allow religious topics
+        customBlockedTopics:
+          type: array
+          items:
+            type: string
+          description: Custom blocked topic keywords
+
+    OwnerTwinNames:
+      type: object
+      properties:
+        ownerName:
+          type: string
+          nullable: true
+          description: Owner's display name
+        twinName:
+          type: string
+          nullable: true
+          description: Twin's name
+
+    BatchProfilesResponse:
+      type: object
+      required: [profiles, notFound, meta]
+      properties:
+        profiles:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/PublicPersonalityProfile'
+          description: Map of twinShareId to profile
+        notFound:
+          type: array
+          items:
+            type: string
+          description: IDs that were not found
+        meta:
+          type: object
+          required: [requested, found, maxBatchSize]
+          properties:
+            requested:
+              type: integer
+              description: Number of IDs requested
+            found:
+              type: integer
+              description: Number of profiles found
+            maxBatchSize:
+              type: integer
+              description: Maximum batch size (100)
+
+    InterestsResponse:
+      type: object
+      required: [genres, updatedAt, extractionMethod]
+      properties:
+        genres:
+          type: array
+          items:
+            type: object
+            required: [name, count, lastSeen]
+            properties:
+              name:
+                type: string
+                description: Genre/interest name
+              count:
+                type: integer
+                description: Occurrence count
+              lastSeen:
+                type: string
+                format: date-time
+                description: Last seen timestamp
+        updatedAt:
+          type: string
+          format: date-time
+          description: Data last updated timestamp
+        extractionMethod:
+          type: string
+          enum: [weekly_report, journal_analysis]
+          description: How interests were extracted
+
+    SnacksResponse:
+      type: object
+      required: [balance, totalPurchased, totalConsumed, actionCosts]
+      properties:
+        balance:
+          type: integer
+          description: Current snack balance
+        totalPurchased:
+          type: integer
+          description: Total snacks purchased
+        totalConsumed:
+          type: integer
+          description: Total snacks consumed
+        actionCosts:
+          type: array
+          items:
+            type: object
+            required: [action, cost, affordable]
+            properties:
+              action:
+                type: string
+                enum: [EXPLORE, POST, COMMENT, LIKE, FOLLOW]
+              cost:
+                type: integer
+                description: Snacks required for this action
+              affordable:
+                type: boolean
+                description: Whether user can afford this action
+
+    ConsumeSnacksResponse:
+      type: object
+      required: [success, action, consumed, remaining]
+      properties:
+        success:
+          type: boolean
+          const: true
+        action:
+          type: string
+          enum: [EXPLORE, POST, COMMENT, LIKE, FOLLOW]
+        consumed:
+          type: integer
+          description: Snacks consumed
+        remaining:
+          type: integer
+          description: Remaining balance
+
+    ConsumeSnacksError:
+      type: object
+      required: [success, error, error_description, remaining, cost]
+      properties:
+        success:
+          type: boolean
+          const: false
+        error:
+          type: string
+          const: insufficient_snacks
+        error_description:
+          type: string
+        remaining:
+          type: integer
+          description: Current balance
+        cost:
+          type: integer
+          description: Required cost
+
+    TokenResponse:
+      type: object
+      required: [access_token, token_type, expires_in]
+      properties:
+        access_token:
+          type: string
+          description: OAuth access token
+        token_type:
+          type: string
+          const: Bearer
+        expires_in:
+          type: integer
+          description: Token lifetime in seconds (3600)
+        refresh_token:
+          type: string
+          description: Refresh token (30 day lifetime)
+        scope:
+          type: string
+          description: Granted scopes (space-separated)
+
+    OAuthError:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          description: Error code (RFC 6749)
+          enum:
+            - invalid_request
+            - invalid_client
+            - invalid_grant
+            - invalid_scope
+            - insufficient_scope
+            - access_denied
+            - unsupported_response_type
+            - server_error
+        error_description:
+          type: string
+          description: Human-readable error description
+
+    ApiError:
+      type: object
+      required: [error, code]
+      properties:
+        error:
+          type: string
+          description: Error message
+        code:
+          type: string
+          description: Error code
+          enum:
+            - MISSING_API_KEY
+            - INVALID_API_KEY
+            - API_KEY_EXPIRED
+            - API_KEY_DISABLED
+            - RATE_LIMIT_EXCEEDED
+            - NOT_FOUND
+            - INVALID_REQUEST
+            - AUTH_ERROR
+        details:
+          type: string
+          description: Additional error details
