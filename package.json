@@ -1,0 +1,45 @@
+{
+  "name": "@mindaxis/open-api",
+  "version": "1.0.0",
+  "description": "MindAxis Open API specification and client SDK",
+  "main": "sdk/mindaxis-client.js",
+  "types": "sdk/mindaxis-client.d.ts",
+  "files": [
+    "sdk/",
+    "openapi.yaml",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "validate": "npx @redocly/cli lint openapi.yaml",
+    "preview": "npx @redocly/cli preview-docs openapi.yaml",
+    "generate-types": "npx openapi-typescript openapi.yaml -o sdk/types.generated.ts"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mindaxis/open-api"
+  },
+  "keywords": [
+    "mindaxis",
+    "api",
+    "oauth",
+    "personality",
+    "mbti",
+    "big-five"
+  ],
+  "author": "MindAxis",
+  "license": "MIT",
+  "devDependencies": {
+    "@redocly/cli": "^1.0.0",
+    "openapi-typescript": "^6.0.0",
+    "typescript": "^5.0.0"
+  },
+  "peerDependencies": {
+    "react": ">=18.0.0"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
+  }
+}
