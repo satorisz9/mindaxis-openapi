@@ -303,5 +303,5 @@ MIT License - see LICENSE file for details.
 
 ## Support
 
-- Issues: https://github.com/mindaxis/open-api/issues
-- Documentation: https://docs.mindaxis.app/open-api
+- Issues: https://github.com/satorisz9/mindaxis-openapi/issues
+- Documentation: https://github.com/satorisz9/mindaxis-openapi
