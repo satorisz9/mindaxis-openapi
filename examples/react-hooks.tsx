@@ -52,7 +52,7 @@ interface UseMindAxisProfileReturn {
 // ===========================================
 
 const STORAGE_KEY = 'mindaxis_auth';
-const DEFAULT_SCOPES: Scope[] = ['profile:read', 'interests:read', 'snacks:read'];
+const DEFAULT_SCOPES: Scope[] = ['profile:read', 'interests:read', 'snacks:read', 'posts:read'];
 
 // Create client instance (configure based on your environment)
 const createClient = () => new MindAxisClient({
