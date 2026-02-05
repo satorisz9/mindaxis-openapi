@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: MindAxis Open API
   description: |
-    MindAxis Open API provides access to user personality profiles, interests, and snack balances.
+    MindAxis Open API provides access to user personality profiles, interests, diary style analysis, and snack balances.
 
     ## Authentication
 
@@ -10,8 +10,8 @@ info:
 
     ### OAuth 2.0 (Authorization Code Flow with PKCE)
     For accessing user's own data with their consent.
-    - Endpoints: `/api/open/me`, `/api/open/names`, `/api/open/interests`, `/api/open/snacks/*`
-    - Scopes: `profile:read`, `interests:read`, `snacks:read`, `snacks:consume`
+    - Endpoints: `/api/open/me`, `/api/open/names`, `/api/open/interests`, `/api/open/diary-style`, `/api/open/snacks/*`
+    - Scopes: `profile:read`, `interests:read`, `style:read`, `snacks:read`, `snacks:consume`
 
     ### API Key
     For accessing public profile data.
@@ -20,14 +20,8 @@ info:
 
     ## Data Privacy
 
-    This API only exposes `PublicPersonalityProfile` data. Private data such as journals,
-    images, and activity logs are never accessible through this API.
-
-    ### Posts Timeline
-    Access the public posts timeline with two tabs:
-    - **最新 (Latest)**: Most recent posts in chronological order
-    - **人気 (Popular)**: Posts with the most likes within the last 24 hours
-    - Scopes: `posts:read`
+    This API only exposes `PublicPersonalityProfile` data and aggregated analysis results.
+    Private data such as journal contents, images, and activity logs are never accessible through this API.
   version: 1.0.0
   contact:
     name: MindAxis Support
@@ -49,10 +43,10 @@ tags:
     description: User personality profile endpoints
   - name: Interests
     description: User interests endpoints
+  - name: DiaryStyle
+    description: Diary writing style analysis endpoints
   - name: Snacks
     description: Snack balance and consumption endpoints
-  - name: Posts
-    description: Posts timeline endpoints
 
 paths:
   /oauth/authorize:
@@ -397,6 +391,114 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/OAuthError'
+    post:
+      tags:
+        - Interests
+      summary: Regenerate user interests
+      description: |
+        Forces regeneration of user interests from journals (ignores cache).
+      security:
+        - oauth2: [interests:read]
+      responses:
+        '200':
+          description: Regenerated interests response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InterestsResponse'
+        '401':
+          description: Invalid or expired token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthError'
+        '403':
+          description: Insufficient scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthError'
+        '404':
+          description: No journal entries found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthError'
+
+  /open/diary-style:
+    get:
+      tags:
+        - DiaryStyle
+      summary: Get diary writing style analysis
+      description: |
+        Returns the user's diary writing style analysis including basic statistics,
+        style features (emoji usage, punctuation patterns, etc.), and AI-powered analysis.
+        Data is cached for 7 days and automatically regenerated when expired.
+      security:
+        - oauth2: [style:read]
+      responses:
+        '200':
+          description: Diary style analysis response
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: "private, max-age=604800"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiaryStyleAnalysis'
+        '401':
+          description: Invalid or expired token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthError'
+        '403':
+          description: Insufficient scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthError'
+        '404':
+          description: No diary style analysis data (insufficient journal entries)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthError'
+    post:
+      tags:
+        - DiaryStyle
+      summary: Regenerate diary style analysis
+      description: |
+        Forces regeneration of diary style analysis (ignores cache).
+      security:
+        - oauth2: [style:read]
+      responses:
+        '200':
+          description: Regenerated diary style analysis response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiaryStyleAnalysis'
+        '401':
+          description: Invalid or expired token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthError'
+        '403':
+          description: Insufficient scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthError'
+        '404':
+          description: No journal entries found for analysis
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthError'
 
   /open/snacks:
     get:
@@ -478,75 +580,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/OAuthError'
 
-  /open/posts:
-    get:
-      tags:
-        - Posts
-      summary: Get posts timeline
-      description: |
-        Returns a paginated timeline of posts. Use the `tab` parameter to switch between tabs:
-        - `latest` (最新): Most recent posts in reverse chronological order
-        - `popular` (人気): Posts with the most likes within the last 24 hours, sorted by like count descending
-      security:
-        - oauth2: [posts:read]
-      parameters:
-        - name: tab
-          in: query
-          required: false
-          schema:
-            type: string
-            enum: [latest, popular]
-            default: latest
-          description: |
-            Timeline tab to display.
-            - `latest` (最新): Chronologically sorted, newest first
-            - `popular` (人気): Sorted by like count, limited to posts from last 24 hours
-        - name: cursor
-          in: query
-          required: false
-          schema:
-            type: string
-          description: Pagination cursor from previous response's `nextCursor`
-        - name: limit
-          in: query
-          required: false
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 50
-            default: 20
-          description: Number of posts per page (1-50, default 20)
-      responses:
-        '200':
-          description: Posts timeline response
-          headers:
-            Cache-Control:
-              schema:
-                type: string
-              description: "private, max-age=30"
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PostsTimelineResponse'
-        '400':
-          description: Invalid request parameters
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/OAuthError'
-        '401':
-          description: Invalid or expired token
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/OAuthError'
-        '403':
-          description: Insufficient scope
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/OAuthError'
-
 components:
   securitySchemes:
     oauth2:
@@ -559,9 +592,9 @@ components:
           scopes:
             profile:read: Read user profile
             interests:read: Read user interests
+            style:read: Read diary style analysis
             snacks:read: Read snack balance
             snacks:consume: Consume snacks
-            posts:read: Read posts timeline
     apiKey:
       type: http
       scheme: bearer
@@ -776,94 +809,6 @@ components:
               type: integer
               description: Maximum batch size (100)
 
-    PostAuthor:
-      type: object
-      required:
-        - id
-        - displayName
-      properties:
-        id:
-          type: string
-          description: Public user ID (twinShareId)
-        displayName:
-          type: string
-          nullable: true
-          description: User's display name
-        avatarThumbnailUrl:
-          type: string
-          nullable: true
-          format: uri
-          description: Avatar thumbnail URL
-        personalityCode:
-          type: string
-          nullable: true
-          pattern: '^[IE][NS][TF][JP]-[A-Z]{4}-[A-Z]{4}$'
-          example: 'INFJ-ARLO-VSOA'
-          description: Full personality code (MBTI-NARR4-REP4)
-
-    Post:
-      type: object
-      required:
-        - id
-        - author
-        - body
-        - likeCount
-        - commentCount
-        - liked
-        - createdAt
-      properties:
-        id:
-          type: string
-          description: Unique post ID
-        author:
-          $ref: '#/components/schemas/PostAuthor'
-        body:
-          type: string
-          maxLength: 1000
-          description: Post body text
-        likeCount:
-          type: integer
-          minimum: 0
-          description: Number of likes
-        commentCount:
-          type: integer
-          minimum: 0
-          description: Number of comments
-        liked:
-          type: boolean
-          description: Whether the authenticated user has liked this post
-        createdAt:
-          type: string
-          format: date-time
-          description: Post creation timestamp
-
-    PostsTimelineResponse:
-      type: object
-      required:
-        - tab
-        - posts
-        - hasMore
-      properties:
-        tab:
-          type: string
-          enum: [latest, popular]
-          description: |
-            Current tab.
-            - `latest`: 最新 (chronological)
-            - `popular`: 人気 (most liked in last 24h)
-        posts:
-          type: array
-          items:
-            $ref: '#/components/schemas/Post'
-          description: Array of posts for the current tab
-        nextCursor:
-          type: string
-          nullable: true
-          description: Cursor for fetching the next page (null if no more pages)
-        hasMore:
-          type: boolean
-          description: Whether more posts are available
-
     InterestsResponse:
       type: object
       required: [genres, updatedAt, extractionMethod]
@@ -892,6 +837,137 @@ components:
           type: string
           enum: [weekly_report, journal_analysis]
           description: How interests were extracted
+
+    DiaryStyleAnalysis:
+      type: object
+      required: [basicStats, styleFeatures, aiAnalysis, updatedAt, analysisMethod]
+      properties:
+        basicStats:
+          $ref: '#/components/schemas/BasicStats'
+        styleFeatures:
+          $ref: '#/components/schemas/StyleFeatures'
+        aiAnalysis:
+          $ref: '#/components/schemas/AIAnalysis'
+        updatedAt:
+          type: string
+          format: date-time
+          description: Data last updated timestamp
+        analysisMethod:
+          type: string
+          enum: [full, partial]
+          description: |
+            Analysis method used:
+            - full: 10+ journal entries analyzed
+            - partial: Less than 10 entries (limited analysis)
+
+    BasicStats:
+      type: object
+      required: [totalEntries, avgCharacters, avgSentences, avgSentenceLength, analyzedPeriodDays]
+      description: Basic statistics about diary entries
+      properties:
+        totalEntries:
+          type: integer
+          description: Total number of diary entries analyzed
+        avgCharacters:
+          type: integer
+          description: Average characters per diary entry
+        avgSentences:
+          type: number
+          description: Average sentences per diary entry
+        avgSentenceLength:
+          type: integer
+          description: Average sentence length in characters
+        analyzedPeriodDays:
+          type: integer
+          description: Number of days covered by the analysis
+
+    StyleFeatures:
+      type: object
+      required: [emojiUsageRate, punctuationDensity, lineBreakDensity, exclamationRate, questionRate, sentenceEndingPatterns]
+      description: Writing style features extracted from diary entries
+      properties:
+        emojiUsageRate:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Emoji usage rate (0-1, ratio of emoji characters to total)
+        punctuationDensity:
+          type: number
+          description: Punctuation marks per 100 characters
+        lineBreakDensity:
+          type: number
+          description: Line breaks per 100 characters
+        exclamationRate:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Exclamation mark ratio among all punctuation (0-1)
+        questionRate:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Question mark ratio among all punctuation (0-1)
+        sentenceEndingPatterns:
+          type: array
+          items:
+            $ref: '#/components/schemas/SentenceEndingPattern'
+          description: Top 5 most common sentence ending patterns
+
+    SentenceEndingPattern:
+      type: object
+      required: [pattern, count, rate]
+      properties:
+        pattern:
+          type: string
+          description: Sentence ending pattern (e.g., "た", "です", "ね")
+        count:
+          type: integer
+          description: Number of occurrences
+        rate:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Usage rate among all sentences (0-1)
+
+    AIAnalysis:
+      type: object
+      required: [styleType, emotionExpression, tenseTendency, characteristicPatterns, styleDescription]
+      description: AI-powered analysis of writing style
+      properties:
+        styleType:
+          type: string
+          enum: [casual, formal, mixed]
+          description: |
+            Overall writing style type:
+            - casual: Informal, conversational style
+            - formal: Polite, formal style
+            - mixed: Combination of styles
+        emotionExpression:
+          type: string
+          enum: [expressive, reserved, balanced]
+          description: |
+            Emotion expression tendency:
+            - expressive: Rich emotional expression
+            - reserved: Reserved emotional expression
+            - balanced: Balanced expression
+        tenseTendency:
+          type: string
+          enum: [past, present, mixed]
+          description: |
+            Dominant tense usage:
+            - past: Mostly past tense
+            - present: Mostly present tense
+            - mixed: Mixed tenses
+        characteristicPatterns:
+          type: array
+          items:
+            type: string
+          maxItems: 5
+          description: Characteristic patterns, phrases, or expressions (max 5)
+        styleDescription:
+          type: string
+          maxLength: 200
+          description: Brief description of the writing style (1-2 sentences)
 
     SnacksResponse:
       type: object
