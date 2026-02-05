@@ -127,6 +127,38 @@ export interface ConsumeSnacksError {
   cost: number;
 }
 
+export type PostsTab = 'latest' | 'popular';
+
+export interface PostAuthor {
+  id: string;
+  displayName: string | null;
+  avatarThumbnailUrl: string | null;
+  personalityCode: string | null;
+}
+
+export interface Post {
+  id: string;
+  author: PostAuthor;
+  body: string;
+  likeCount: number;
+  commentCount: number;
+  liked: boolean;
+  createdAt: string;
+}
+
+export interface PostsTimelineResponse {
+  tab: PostsTab;
+  posts: Post[];
+  nextCursor: string | null;
+  hasMore: boolean;
+}
+
+export interface GetPostsOptions {
+  tab?: PostsTab;
+  cursor?: string;
+  limit?: number;
+}
+
 export interface BatchProfilesResponse {
   profiles: Record<string, PublicPersonalityProfile>;
   notFound: string[];
@@ -156,7 +188,7 @@ export interface ApiError {
   details?: string;
 }
 
-export type Scope = 'profile:read' | 'interests:read' | 'snacks:read' | 'snacks:consume';
+export type Scope = 'profile:read' | 'interests:read' | 'snacks:read' | 'snacks:consume' | 'posts:read';
 
 // ===========================================
 // Configuration
@@ -431,6 +463,42 @@ export class MindAxisClient {
    */
   async getInterests(accessToken: string): Promise<InterestsResponse> {
     return this.fetchWithOAuth<InterestsResponse>('/open/interests', accessToken);
+  }
+
+  // -------------------------------------------
+  // Posts Methods (OAuth)
+  // -------------------------------------------
+
+  /**
+   * Get the posts timeline.
+   * Requires `posts:read` scope.
+   *
+   * @param accessToken - OAuth access token
+   * @param options - Timeline options (tab, cursor, limit)
+   * @returns Paginated posts timeline
+   *
+   * @example Latest posts (最新)
+   * ```typescript
+   * const timeline = await client.getPostsTimeline(token, { tab: 'latest' });
+   * ```
+   *
+   * @example Popular posts (人気)
+   * ```typescript
+   * const timeline = await client.getPostsTimeline(token, { tab: 'popular' });
+   * ```
+   */
+  async getPostsTimeline(
+    accessToken: string,
+    options: GetPostsOptions = {}
+  ): Promise<PostsTimelineResponse> {
+    const params = new URLSearchParams();
+    if (options.tab) params.set('tab', options.tab);
+    if (options.cursor) params.set('cursor', options.cursor);
+    if (options.limit) params.set('limit', String(options.limit));
+
+    const query = params.toString();
+    const path = `/open/posts${query ? `?${query}` : ''}`;
+    return this.fetchWithOAuth<PostsTimelineResponse>(path, accessToken);
   }
 
   // -------------------------------------------

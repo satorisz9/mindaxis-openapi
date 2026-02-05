@@ -22,6 +22,12 @@ info:
 
     This API only exposes `PublicPersonalityProfile` data. Private data such as journals,
     images, and activity logs are never accessible through this API.
+
+    ### Posts Timeline
+    Access the public posts timeline with two tabs:
+    - **最新 (Latest)**: Most recent posts in chronological order
+    - **人気 (Popular)**: Posts with the most likes within the last 24 hours
+    - Scopes: `posts:read`
   version: 1.0.0
   contact:
     name: MindAxis Support
@@ -45,6 +51,8 @@ tags:
     description: User interests endpoints
   - name: Snacks
     description: Snack balance and consumption endpoints
+  - name: Posts
+    description: Posts timeline endpoints
 
 paths:
   /oauth/authorize:
@@ -470,6 +478,75 @@ paths:
               schema:
                 $ref: '#/components/schemas/OAuthError'
 
+  /open/posts:
+    get:
+      tags:
+        - Posts
+      summary: Get posts timeline
+      description: |
+        Returns a paginated timeline of posts. Use the `tab` parameter to switch between tabs:
+        - `latest` (最新): Most recent posts in reverse chronological order
+        - `popular` (人気): Posts with the most likes within the last 24 hours, sorted by like count descending
+      security:
+        - oauth2: [posts:read]
+      parameters:
+        - name: tab
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [latest, popular]
+            default: latest
+          description: |
+            Timeline tab to display.
+            - `latest` (最新): Chronologically sorted, newest first
+            - `popular` (人気): Sorted by like count, limited to posts from last 24 hours
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Pagination cursor from previous response's `nextCursor`
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+          description: Number of posts per page (1-50, default 20)
+      responses:
+        '200':
+          description: Posts timeline response
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: "private, max-age=30"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PostsTimelineResponse'
+        '400':
+          description: Invalid request parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthError'
+        '401':
+          description: Invalid or expired token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthError'
+        '403':
+          description: Insufficient scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthError'
+
 components:
   securitySchemes:
     oauth2:
@@ -484,6 +561,7 @@ components:
             interests:read: Read user interests
             snacks:read: Read snack balance
             snacks:consume: Consume snacks
+            posts:read: Read posts timeline
     apiKey:
       type: http
       scheme: bearer
@@ -697,6 +775,94 @@ components:
             maxBatchSize:
               type: integer
               description: Maximum batch size (100)
+
+    PostAuthor:
+      type: object
+      required:
+        - id
+        - displayName
+      properties:
+        id:
+          type: string
+          description: Public user ID (twinShareId)
+        displayName:
+          type: string
+          nullable: true
+          description: User's display name
+        avatarThumbnailUrl:
+          type: string
+          nullable: true
+          format: uri
+          description: Avatar thumbnail URL
+        personalityCode:
+          type: string
+          nullable: true
+          pattern: '^[IE][NS][TF][JP]-[A-Z]{4}-[A-Z]{4}$'
+          example: 'INFJ-ARLO-VSOA'
+          description: Full personality code (MBTI-NARR4-REP4)
+
+    Post:
+      type: object
+      required:
+        - id
+        - author
+        - body
+        - likeCount
+        - commentCount
+        - liked
+        - createdAt
+      properties:
+        id:
+          type: string
+          description: Unique post ID
+        author:
+          $ref: '#/components/schemas/PostAuthor'
+        body:
+          type: string
+          maxLength: 1000
+          description: Post body text
+        likeCount:
+          type: integer
+          minimum: 0
+          description: Number of likes
+        commentCount:
+          type: integer
+          minimum: 0
+          description: Number of comments
+        liked:
+          type: boolean
+          description: Whether the authenticated user has liked this post
+        createdAt:
+          type: string
+          format: date-time
+          description: Post creation timestamp
+
+    PostsTimelineResponse:
+      type: object
+      required:
+        - tab
+        - posts
+        - hasMore
+      properties:
+        tab:
+          type: string
+          enum: [latest, popular]
+          description: |
+            Current tab.
+            - `latest`: 最新 (chronological)
+            - `popular`: 人気 (most liked in last 24h)
+        posts:
+          type: array
+          items:
+            $ref: '#/components/schemas/Post'
+          description: Array of posts for the current tab
+        nextCursor:
+          type: string
+          nullable: true
+          description: Cursor for fetching the next page (null if no more pages)
+        hasMore:
+          type: boolean
+          description: Whether more posts are available
 
     InterestsResponse:
       type: object
