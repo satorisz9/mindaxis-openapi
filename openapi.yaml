@@ -716,6 +716,43 @@ components:
           type: string
           enum: [casual, polite, formal]
           description: Formality level
+        description:
+          type: string
+          nullable: true
+          maxLength: 500
+          description: AI-generated natural language description of the user's writing style
+          example: '絵文字や顔文字を多用した親しみやすくカジュアルな話し言葉の文体で、感情を素直に表現する傾向が強い。'
+        tags:
+          type: array
+          nullable: true
+          items:
+            type: string
+          description: Style tags summarizing the writing style (e.g. casual, expressive)
+          example: ['casual', 'expressive']
+        features:
+          type: array
+          nullable: true
+          items:
+            type: string
+          description: List of specific writing style features extracted from journal analysis
+          example: ['絵文字・顔文字の多用', '短く断片的な文と改行を活かした構成']
+        averageCharCount:
+          type: integer
+          nullable: true
+          minimum: 1
+          description: Average character count per post derived from journal style analysis. Used as target length for twin post generation instead of random values.
+          example: 78
+        sampleCount:
+          type: integer
+          nullable: true
+          minimum: 0
+          description: Number of journal entries used for style analysis
+          example: 8
+        styleUpdatedAt:
+          type: string
+          nullable: true
+          format: date-time
+          description: Timestamp of the last style analysis update
 
     SafetyPrefs:
       type: object

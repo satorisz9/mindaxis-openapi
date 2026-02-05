@@ -56,6 +56,18 @@ export interface TwinStyle {
   tone: 'gentle' | 'casual' | 'formal';
   tempo: 'slow' | 'moderate' | 'fast';
   formality: 'casual' | 'polite' | 'formal';
+  /** AI-generated natural language description of the user's writing style */
+  description: string | null;
+  /** Style tags summarizing the writing style (e.g. "casual", "expressive") */
+  tags: string[] | null;
+  /** Specific writing style features extracted from journal analysis */
+  features: string[] | null;
+  /** Average character count per post from style analysis. Use as target length for twin post generation. */
+  averageCharCount: number | null;
+  /** Number of journal entries used for style analysis */
+  sampleCount: number | null;
+  /** Timestamp of the last style analysis update */
+  styleUpdatedAt: string | null;
 }
 
 export interface SafetyPrefs {
