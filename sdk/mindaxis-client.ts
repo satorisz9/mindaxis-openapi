@@ -153,8 +153,27 @@ export interface PostsTimelineResponse {
   hasMore: boolean;
 }
 
+export interface Comment {
+  id: string;
+  postId: string;
+  author: PostAuthor;
+  body: string;
+  createdAt: string;
+}
+
+export interface CommentsResponse {
+  comments: Comment[];
+  nextCursor: string | null;
+  hasMore: boolean;
+}
+
 export interface GetPostsOptions {
   tab?: PostsTab;
+  cursor?: string;
+  limit?: number;
+}
+
+export interface GetCommentsOptions {
   cursor?: string;
   limit?: number;
 }
@@ -499,6 +518,32 @@ export class MindAxisClient {
     const query = params.toString();
     const path = `/open/posts${query ? `?${query}` : ''}`;
     return this.fetchWithOAuth<PostsTimelineResponse>(path, accessToken);
+  }
+
+  /**
+   * Get a single post by ID.
+   * Requires `posts:read` scope.
+   */
+  async getPost(accessToken: string, postId: string): Promise<Post> {
+    return this.fetchWithOAuth<Post>(`/open/posts/${encodeURIComponent(postId)}`, accessToken);
+  }
+
+  /**
+   * Get comments for a post.
+   * Requires `posts:read` scope.
+   */
+  async getComments(
+    accessToken: string,
+    postId: string,
+    options: GetCommentsOptions = {}
+  ): Promise<CommentsResponse> {
+    const params = new URLSearchParams();
+    if (options.cursor) params.set('cursor', options.cursor);
+    if (options.limit) params.set('limit', String(options.limit));
+
+    const query = params.toString();
+    const path = `/open/posts/${encodeURIComponent(postId)}/comments${query ? `?${query}` : ''}`;
+    return this.fetchWithOAuth<CommentsResponse>(path, accessToken);
   }
 
   // -------------------------------------------

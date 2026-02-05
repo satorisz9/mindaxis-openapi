@@ -547,6 +547,103 @@ paths:
               schema:
                 $ref: '#/components/schemas/OAuthError'
 
+  /open/posts/{postId}:
+    get:
+      tags:
+        - Posts
+      summary: Get a single post
+      description: Returns a single post by ID
+      security:
+        - oauth2: [posts:read]
+      parameters:
+        - name: postId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Post ID
+      responses:
+        '200':
+          description: Post detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Post'
+        '401':
+          description: Invalid or expired token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthError'
+        '403':
+          description: Insufficient scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthError'
+        '404':
+          description: Post not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthError'
+
+  /open/posts/{postId}/comments:
+    get:
+      tags:
+        - Posts
+      summary: Get comments for a post
+      description: Returns a paginated list of comments for a given post
+      security:
+        - oauth2: [posts:read]
+      parameters:
+        - name: postId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Post ID
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Pagination cursor from previous response's `nextCursor`
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+          description: Number of comments per page (1-50, default 20)
+      responses:
+        '200':
+          description: Comments list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommentsResponse'
+        '401':
+          description: Invalid or expired token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthError'
+        '403':
+          description: Insufficient scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthError'
+        '404':
+          description: Post not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthError'
+
 components:
   securitySchemes:
     oauth2:
@@ -863,6 +960,51 @@ components:
         hasMore:
           type: boolean
           description: Whether more posts are available
+
+    Comment:
+      type: object
+      required:
+        - id
+        - postId
+        - author
+        - body
+        - createdAt
+      properties:
+        id:
+          type: string
+          description: Unique comment ID
+        postId:
+          type: string
+          description: Parent post ID
+        author:
+          $ref: '#/components/schemas/PostAuthor'
+        body:
+          type: string
+          maxLength: 500
+          description: Comment body text
+        createdAt:
+          type: string
+          format: date-time
+          description: Comment creation timestamp
+
+    CommentsResponse:
+      type: object
+      required:
+        - comments
+        - hasMore
+      properties:
+        comments:
+          type: array
+          items:
+            $ref: '#/components/schemas/Comment'
+          description: Array of comments
+        nextCursor:
+          type: string
+          nullable: true
+          description: Cursor for fetching the next page (null if no more pages)
+        hasMore:
+          type: boolean
+          description: Whether more comments are available
 
     InterestsResponse:
       type: object
